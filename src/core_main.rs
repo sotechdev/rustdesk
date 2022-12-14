@@ -173,7 +173,7 @@ pub fn core_main() -> Option<Vec<String>> {
             crate::start_os_service();
             return None;
         } else if args[0] == "--server" {
-            log::info!("start --server");
+            log::info!("start --server with user {}", crate::username());
             #[cfg(target_os = "windows")]
             {
                 crate::start_server(true);
@@ -214,7 +214,11 @@ pub fn core_main() -> Option<Vec<String>> {
             return None;
         } else if args[0] == "--password" {
             if args.len() == 2 {
-                crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                if crate::platform::is_root() {
+                    crate::ipc::set_permanent_password(args[1].to_owned()).unwrap();
+                } else {
+                    println!("Administrative privileges required!");
+                }
             }
             return None;
         } else if args[0] == "--check-hwcodec-config" {

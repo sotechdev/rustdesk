@@ -17,7 +17,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Transfer File", "Transferir archivo"),
         ("Connect", "Conectar"),
         ("Recent Sessions", "Sesiones recientes"),
-        ("Address Book", "Directorio"),
+        ("Address Book", "Libreta de direcciones"),
         ("Confirmation", "Confirmación"),
         ("TCP Tunneling", "Túnel TCP"),
         ("Remove", "Quitar"),
@@ -397,5 +397,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request access to your device", "Solicitud de acceso a su dispositivo"),
         ("Hide connection management window", "Ocultar ventana de gestión de conexión"),
         ("hide_cm_tip", "Permitir ocultar solo si se aceptan sesiones a través de contraseña y usando contraseña permanente"),
+        ("wayland_experiment_tip", "El soporte para Wayland está en fase experimental, por favor, use X11 si necesita acceso desatendido."),
+        ("Right click to select tabs", "Clic derecho para seleccionar pestañas"),
+        ("Add to Address Book", "Añadir a la libreta de direcciones"),
+        ("Group", ""),
+        ("Search", ""),
     ].iter().cloned().collect();
 }

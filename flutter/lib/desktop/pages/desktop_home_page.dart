@@ -14,11 +14,8 @@ import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:flutter_hbb/utils/tray_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
@@ -34,7 +31,7 @@ class DesktopHomePage extends StatefulWidget {
 const borderColor = Color(0xFF2F65BA);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
-    with TrayListener, AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin {
   final _leftPaneScrollController = ScrollController();
 
   @override
@@ -304,15 +301,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards() {
-    if (Platform.isWindows) {
-      if (!bind.mainIsInstalled()) {
-        return buildInstallCard(
-            "", "install_tip", "Install", bind.mainGotoInstall);
-      } else if (bind.mainIsInstalledLowerVersion()) {
-        return buildInstallCard("Status", "Your installation is lower version.",
-            "Click to upgrade", bind.mainUpdateMe);
-      }
-    }
     if (updateUrl.isNotEmpty) {
       return buildInstallCard(
           "Status",
@@ -325,7 +313,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
     }
-    if (Platform.isMacOS) {
+    if (Platform.isWindows) {
+      if (!bind.mainIsInstalled()) {
+        return buildInstallCard(
+            "", "install_tip", "Install", bind.mainGotoInstall);
+      } else if (bind.mainIsInstalledLowerVersion()) {
+        return buildInstallCard("Status", "Your installation is lower version.",
+            "Click to upgrade", bind.mainUpdateMe);
+      }
+    } else if (Platform.isMacOS) {
       if (!bind.mainIsCanScreenRecording(prompt: false)) {
         return buildInstallCard("Permissions", "config_screen", "Configure",
             () async {
@@ -345,8 +341,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainIsInstalledDaemon(prompt: true);
         });
       }
+    } else if (Platform.isLinux) {
+      if (bind.mainCurrentIsWayland()) {
+        return buildInstallCard(
+            "Warning", translate("wayland_experiment_tip"), "", () async {},
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/manual/linux/#x11-required');
+      } else if (bind.mainIsLoginWayland()) {
+        return buildInstallCard("Warning",
+            "Login screen using Wayland is not supported", "", () async {},
+            help: 'Help',
+            link: 'https://rustdesk.com/docs/en/manual/linux/#login-screen');
+      }
     }
-    if (bind.mainIsInstalledLowerVersion()) {}
     return Container();
   }
 
@@ -429,38 +436,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   @override
-  void onTrayIconMouseDown() {
-    windowManager.show();
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    // linux does not support popup menu manually.
-    // linux will handle popup action ifself.
-    if (Platform.isMacOS || Platform.isWindows) {
-      trayManager.popUpContextMenu();
-    }
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    switch (menuItem.key) {
-      case kTrayItemQuitKey:
-        windowManager.close();
-        break;
-      case kTrayItemShowKey:
-        windowManager.show();
-        windowManager.focus();
-        break;
-      default:
-        break;
-    }
-  }
-
-  @override
   void initState() {
     super.initState();
-    bind.mainStartGrabKeyboard();
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       final url = await bind.mainGetSoftwareUpdateUrl();
@@ -492,17 +469,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     });
     Get.put<RxBool>(svcStopped, tag: 'stop-service');
-    // disable this tray because we use tray function provided by rust now
-    // initTray();
-    trayManager.addListener(this);
     rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
-      if (call.method == "main_window_on_top") {
+      if (call.method == kWindowMainWindowOnTop) {
         window_on_top(null);
-      } else if (call.method == "get_window_info") {
+      } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
           return "";
@@ -529,6 +503,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
       } else if (call.method == kWindowEventHide) {
         rustDeskWinManager.unregisterActiveWindow(call.arguments["id"]);
+      } else if (call.method == kWindowConnect) {
+        await connectMainDesktop(
+          call.arguments['id'],
+          isFileTransfer: call.arguments['isFileTransfer'],
+          isTcpTunneling: call.arguments['isTcpTunneling'],
+          isRDP: call.arguments['isRDP'],
+        );
       }
     });
     _uniLinksSubscription = listenUniLinks();
@@ -536,10 +517,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   void dispose() {
-    // destoryTray();
-    // fix: disable unregister to prevent from receiving events from other windows
-    // rustDeskWinManager.unregisterActiveWindowListener(onActiveWindowChanged);
-    trayManager.removeListener(this);
     _uniLinksSubscription?.cancel();
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();

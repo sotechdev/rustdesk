@@ -117,6 +117,7 @@ void runMainApp(bool startService) async {
     // await windowManager.ensureInitialized();
     gFFI.serverModel.startService();
   }
+  gFFI.userModel.refreshCurrentUser();
   runApp(App());
   // restore the location of the main window before window hide or show
   await restoreWindowPosition(WindowType.Main);
@@ -177,8 +178,7 @@ void runMultiWindow(
     MyTheme.currentThemeMode(),
   );
   // we do not hide titlebar on win7 because of the frame overflow.
-  if (Platform.isWindows &&
-      const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion)) {
+  if (kUseCompatibleUiMode) {
     WindowController.fromWindowId(windowId!).showTitleBar(true);
   }
   switch (appType) {
@@ -283,8 +283,7 @@ void runInstallPage() async {
 WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
   var defaultTitleBarStyle = TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
-  if (Platform.isWindows &&
-      const [WindowsTarget.w7].contains(windowsBuildNumber.windowsVersion)) {
+  if (kUseCompatibleUiMode) {
     defaultTitleBarStyle = TitleBarStyle.normal;
   }
   return WindowOptions(

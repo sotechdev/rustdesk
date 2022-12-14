@@ -75,6 +75,11 @@ pub enum FS {
         id: i32,
         file_num: i32,
     },
+    WriteError {
+        id: i32,
+        file_num: i32,
+        err: String,
+    },
     WriteOffset {
         id: i32,
         file_num: i32,
@@ -539,7 +544,7 @@ async fn check_pid(postfix: &str) {
             }
         }
     }
-    hbb_common::allow_err!(std::fs::remove_file(&Config::ipc_path(postfix)));
+    std::fs::remove_file(&Config::ipc_path(postfix)).ok();
 }
 
 #[inline]

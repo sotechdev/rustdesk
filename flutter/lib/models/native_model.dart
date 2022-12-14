@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:win32/win32.dart' as win32;
 
 import '../common.dart';
 import '../generated_bridge.dart';
@@ -28,6 +29,7 @@ typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 /// Hides the platform differences.
 class PlatformFFI {
   String _dir = '';
+  // _homeDir is only needed for Android and IOS.
   String _homeDir = '';
   F2? _translate;
   final _eventHandlers = <String, Map<String, HandleEvent>>{};
@@ -118,11 +120,13 @@ class PlatformFFI {
         if (isAndroid) {
           // only support for android
           _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
+        } else if (isIOS) {
+          _homeDir = _ffiBind.mainGetDataDirIos();
         } else {
-          _homeDir = (await getDownloadsDirectory())?.path ?? '';
+          // no need to set home dir
         }
       } catch (e) {
-        debugPrint('initialize failed: $e');
+        debugPrintStack(label: 'initialize failed: $e');
       }
       String id = 'NA';
       String name = 'Flutter';
@@ -142,12 +146,13 @@ class PlatformFFI {
         id = linuxInfo.machineId ?? linuxInfo.id;
       } else if (Platform.isWindows) {
         try {
+          // request windows build number to fix overflow on win7
+          windowsBuildNumber = getWindowsTargetBuildNumber();
           WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
           name = winInfo.computerName;
           id = winInfo.computerName;
-          windowsBuildNumber = winInfo.buildNumber;
         } catch (e) {
-          debugPrint("$e");
+          debugPrintStack(label: "get windows device info failed: $e");
           name = "unknown";
           id = "unknown";
         }
@@ -156,14 +161,19 @@ class PlatformFFI {
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? '';
       }
-      debugPrint(
-          '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
+      if (isAndroid || isIOS) {
+        debugPrint(
+            '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
+      } else {
+        debugPrint(
+            '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir');
+      }
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);
       await _ffiBind.mainInit(appDir: _dir);
     } catch (e) {
-      debugPrint('initialize failed: $e');
+      debugPrintStack(label: 'initialize failed: $e');
     }
     version = await getVersion();
   }

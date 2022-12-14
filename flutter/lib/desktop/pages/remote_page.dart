@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_custom_cursor/cursor_manager.dart'
+    as custom_cursor_manager;
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -109,17 +111,17 @@ class _RemotePageState extends State<RemotePage>
         id: widget.id, arg: 'show-remote-cursor');
     _zoomCursor.value =
         bind.sessionGetToggleOptionSync(id: widget.id, arg: 'zoom-cursor');
-    if (!_isCustomCursorInited) {
-      customCursorController.registerNeedUpdateCursorCallback(
-          (String? lastKey, String? currentKey) async {
-        if (_firstEnterImage.value) {
-          _firstEnterImage.value = false;
-          return true;
-        }
-        return lastKey == null || lastKey != currentKey;
-      });
-      _isCustomCursorInited = true;
-    }
+    // if (!_isCustomCursorInited) {
+    //   customCursorController.registerNeedUpdateCursorCallback(
+    //       (String? lastKey, String? currentKey) async {
+    //     if (_firstEnterImage.value) {
+    //       _firstEnterImage.value = false;
+    //       return true;
+    //     }
+    //     return lastKey == null || lastKey != currentKey;
+    //   });
+    //   _isCustomCursorInited = true;
+    // }
   }
 
   @override
@@ -366,15 +368,23 @@ class _ImagePaintState extends State<ImagePaint> {
       return MouseCursor.defer;
     } else {
       final key = cache.updateGetKey(scale, zoomCursor.value);
-      cursor.addKey(key);
-      return FlutterCustomMemoryImageCursor(
-        pixbuf: cache.data,
-        key: key,
-        hotx: cache.hotx,
-        hoty: cache.hoty,
-        imageWidth: (cache.width * cache.scale).toInt(),
-        imageHeight: (cache.height * cache.scale).toInt(),
-      );
+      if (!cursor.cachedKeys.contains(key)) {
+        debugPrint("Register custom cursor with key $key");
+        // [Safety]
+        // It's ok to call async registerCursor in current synchronous context,
+        // because activating the cursor is also an async call and will always
+        // be executed after this.
+        custom_cursor_manager.CursorManager.instance
+            .registerCursor(custom_cursor_manager.CursorData()
+              ..buffer = cache.data!
+              ..height = (cache.height * cache.scale).toInt()
+              ..width = (cache.width * cache.scale).toInt()
+              ..hotX = cache.hotx
+              ..hotY = cache.hoty
+              ..name = key);
+        cursor.addKey(key);
+      }
+      return FlutterCustomMemoryImageCursor(key: key);
     }
   }
 
@@ -413,8 +423,12 @@ class _ImagePaintState extends State<ImagePaint> {
       );
     } else {
       widget = Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [widget],
+        children: [
+          Container(
+            width: ((layoutSize.width - size.width) ~/ 2).toDouble(),
+          ),
+          widget,
+        ],
       );
     }
     if (layoutSize.height < size.height) {
@@ -430,8 +444,12 @@ class _ImagePaintState extends State<ImagePaint> {
       );
     } else {
       widget = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [widget],
+        children: [
+          Container(
+            height: ((layoutSize.height - size.height) ~/ 2).toDouble(),
+          ),
+          widget,
+        ],
       );
     }
     if (layoutSize.width < size.width) {
@@ -576,7 +594,8 @@ class ImagePainter extends CustomPainter {
         paint.filterQuality = FilterQuality.high;
       }
     }
-    canvas.drawImage(image!, Offset(x, y), paint);
+    canvas.drawImage(
+        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
   }
 
   @override

@@ -57,6 +57,10 @@ lazy_static::lazy_static! {
 
 lazy_static::lazy_static! {
     pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+lazy_static::lazy_static! {
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 
@@ -199,6 +203,8 @@ pub struct PeerConfig {
     pub enable_file_transfer: bool,
     #[serde(default)]
     pub show_quality_monitor: bool,
+    #[serde(default)]
+    pub keyboard_mode: String,
 
     // The other scalar value must before this
     #[serde(default, deserialize_with = "PeerConfig::deserialize_options")]

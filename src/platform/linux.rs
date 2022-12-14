@@ -179,7 +179,8 @@ fn set_x11_env(uid: &str) {
     log::info!("uid of seat0: {}", uid);
     let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
     let mut auth = get_env_tries("XAUTHORITY", uid, 10);
-    if auth.is_empty() {
+    // auth is another user's when uid = 0, https://github.com/rustdesk/rustdesk/issues/2468
+    if auth.is_empty() || uid == "0" {
         auth = if std::path::Path::new(&gdm).exists() {
             gdm
         } else {
@@ -416,9 +417,9 @@ fn get_display() -> String {
 
 pub fn is_login_wayland() -> bool {
     if let Ok(contents) = std::fs::read_to_string("/etc/gdm3/custom.conf") {
-        contents.contains("#WaylandEnable=false")
+        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
     } else if let Ok(contents) = std::fs::read_to_string("/etc/gdm/custom.conf") {
-        contents.contains("#WaylandEnable=false")
+        contents.contains("#WaylandEnable=false") || contents.contains("WaylandEnable=true")
     } else {
         false
     }
@@ -715,3 +716,4 @@ pub fn get_double_click_time() -> u32 {
         double_click_time
     }
 }
+
