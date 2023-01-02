@@ -39,6 +39,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "Αλλαγή αναγνωριστικού ID"),
         ("Website", "Ιστότοπος"),
         ("About", "Πληροφορίες"),
+        ("Slogan_tip", ""),
+        ("Privacy Statement", ""),
         ("Mute", "Σίγαση"),
         ("Audio Input", "Είσοδος ήχου"),
         ("Enhancements", "Βελτιώσεις"),
@@ -399,8 +401,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Να επιτρέπεται η απόκρυψη, μόνο εάν αποδέχεστε συνδέσεις μέσω κωδικού πρόσβασης και χρησιμοποιείτε μόνιμο κωδικό πρόσβασης"),
         ("wayland_experiment_tip", "Η υποστήριξη Wayland βρίσκεται σε πειραματικό στάδιο, χρησιμοποιήστε το X11 εάν χρειάζεστε πρόσβαση χωρίς επίβλεψη."),
         ("Right click to select tabs", "Κάντε δεξί κλικ για να επιλέξετε καρτέλες"),
+        ("Skipped", ""),
         ("Add to Address Book", "Προσθήκη στο Βιβλίο Διευθύνσεων"),
         ("Group", "Ομάδα"),
         ("Search", "Αναζήτηση"),
+        ("Closed manually by the web console", ""),
+        ("Local keyboard type", ""),
+        ("Select local keyboard type", ""),
     ].iter().cloned().collect();
 }

@@ -39,6 +39,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "更改 ID"),
         ("Website", "網站"),
         ("About", "關於"),
+        ("Slogan_tip", ""),
+        ("Privacy Statement", ""),
         ("Mute", "靜音"),
         ("Audio Input", "音訊輸入"),
         ("Enhancements", "增強功能"),
@@ -399,8 +401,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "在只允許密碼連接並且只用固定密碼的情況下才允許隱藏"),
         ("wayland_experiment_tip", ""),
         ("Right click to select tabs", "右鍵選擇選項卡"),
+        ("Skipped", ""),
         ("Add to Address Book", "添加到地址簿"),
         ("Group", "小組"),
         ("Search", "搜索"),
+        ("Closed manually by the web console", "被web控制台手動關閉"),
+        ("Local keyboard type", "本地鍵盤類型"),
+        ("Select local keyboard type", "請選擇本地鍵盤類型"),
     ].iter().cloned().collect();
 }

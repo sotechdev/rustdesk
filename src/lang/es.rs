@@ -39,6 +39,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "Cambiar ID"),
         ("Website", "Sitio web"),
         ("About", "Acerca de"),
+        ("Slogan_tip", ""),
+        ("Privacy Statement", ""),
         ("Mute", "Silenciar"),
         ("Audio Input", "Entrada de audio"),
         ("Enhancements", "Mejoras"),
@@ -399,8 +401,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", "Permitir ocultar solo si se aceptan sesiones a través de contraseña y usando contraseña permanente"),
         ("wayland_experiment_tip", "El soporte para Wayland está en fase experimental, por favor, use X11 si necesita acceso desatendido."),
         ("Right click to select tabs", "Clic derecho para seleccionar pestañas"),
+        ("Skipped", ""),
         ("Add to Address Book", "Añadir a la libreta de direcciones"),
-        ("Group", ""),
-        ("Search", ""),
+        ("Group", "Grupo"),
+        ("Search", "Búsqueda"),
+        ("Closed manually by the web console", "Cerrado manualmente por la consola web"),
+        ("Local keyboard type", ""),
+        ("Select local keyboard type", ""),
     ].iter().cloned().collect();
 }

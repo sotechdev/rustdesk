@@ -39,6 +39,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "Ŝanĝi identigilon"),
         ("Website", "Retejo"),
         ("About", "Pri"),
+        ("Slogan_tip", ""),
+        ("Privacy Statement", ""),
         ("Mute", "Muta"),
         ("Audio Input", "Aŭdia enigo"),
         ("Enhancements", ""),
@@ -399,8 +401,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("hide_cm_tip", ""),
         ("wayland_experiment_tip", ""),
         ("Right click to select tabs", ""),
+        ("Skipped", ""),
         ("Add to Address Book", ""),
         ("Group", ""),
         ("Search", ""),
+        ("Closed manually by the web console", ""),
+        ("Local keyboard type", ""),
+        ("Select local keyboard type", ""),
     ].iter().cloned().collect();
 }

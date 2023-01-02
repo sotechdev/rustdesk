@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../widgets/remote_menubar.dart';
+import '../widgets/kb_layout_type_chooser.dart';
 
 bool _isCustomCursorInited = false;
 final SimpleWrapper<bool> _firstEnterImage = SimpleWrapper(false);
@@ -48,17 +50,17 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, MultiWindowListener {
   Timer? _timer;
   String keyboardMode = "legacy";
+  bool _isWindowBlur = false;
   final _cursorOverImage = false.obs;
   late RxBool _showRemoteCursor;
   late RxBool _zoomCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
 
-  final FocusNode _rawKeyFocusNode = FocusNode();
-  var _imageFocused = false;
+  final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
   Function(bool)? _onEnterOrLeaveImage4Menubar;
 
@@ -94,6 +96,10 @@ class _RemotePageState extends State<RemotePage>
     _initStates(widget.id);
     _ffi = FFI();
     Get.put(_ffi, tag: widget.id);
+    _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
+      showKBLayoutTypeChooserIfNeeded(
+          _ffi.ffiModel.pi.platform, _ffi.dialogManager);
+    });
     _ffi.start(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -103,7 +109,6 @@ class _RemotePageState extends State<RemotePage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
-    _rawKeyFocusNode.requestFocus();
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // Session option should be set after models.dart/FFI.start
@@ -111,6 +116,7 @@ class _RemotePageState extends State<RemotePage>
         id: widget.id, arg: 'show-remote-cursor');
     _zoomCursor.value =
         bind.sessionGetToggleOptionSync(id: widget.id, arg: 'zoom-cursor');
+    DesktopMultiWindow.addListener(this);
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
     //       (String? lastKey, String? currentKey) async {
@@ -125,8 +131,44 @@ class _RemotePageState extends State<RemotePage>
   }
 
   @override
+  void onWindowBlur() {
+    super.onWindowBlur();
+    // On windows, we use `focus` way to handle keyboard better.
+    // Now on Linux, there's some rdev issues which will break the input.
+    // We disable the `focus` way for non-Windows temporarily.
+    if (Platform.isWindows) {
+      _isWindowBlur = true;
+      // unfocus the primary-focus when the whole window is lost focus,
+      // and let OS to handle events instead.
+      _rawKeyFocusNode.unfocus();
+    }
+  }
+
+  @override
+  void onWindowFocus() {
+    super.onWindowFocus();
+    // See [onWindowBlur].
+    if (Platform.isWindows) {
+      _isWindowBlur = false;
+    }
+  }
+
+  @override
+  void onWindowRestore() {
+    super.onWindowRestore();
+    // On windows, we use `onWindowRestore` way to handle window restore from
+    // a minimized state.
+    if (Platform.isWindows) {
+      _isWindowBlur = false;
+    }
+  }
+
+  @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
+    // ensure we leave this session, this is a double check
+    bind.sessionEnterOrLeave(id: widget.id, enter: false);
+    DesktopMultiWindow.removeListener(this);
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.recordingModel.onClose();
     _rawKeyFocusNode.dispose();
@@ -155,8 +197,23 @@ class _RemotePageState extends State<RemotePage>
                   color: Colors.black,
                   child: RawKeyFocusScope(
                       focusNode: _rawKeyFocusNode,
-                      onFocusChange: (bool v) {
-                        _imageFocused = v;
+                      onFocusChange: (bool imageFocused) {
+                        debugPrint(
+                            "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");
+                        // See [onWindowBlur].
+                        if (Platform.isWindows) {
+                          if (_isWindowBlur) {
+                            imageFocused = false;
+                            Future.delayed(Duration.zero, () {
+                              _rawKeyFocusNode.unfocus();
+                            });
+                          }
+                          if (imageFocused) {
+                            _ffi.inputModel.enterOrLeave(true);
+                          } else {
+                            _ffi.inputModel.enterOrLeave(false);
+                          }
+                        }
                       },
                       inputModel: _ffi.inputModel,
                       child: getBodyForDesktop(context)));
@@ -183,9 +240,6 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void enterView(PointerEnterEvent evt) {
-    if (!_imageFocused) {
-      _rawKeyFocusNode.requestFocus();
-    }
     _cursorOverImage.value = true;
     _firstEnterImage.value = true;
     if (_onEnterOrLeaveImage4Menubar != null) {
@@ -195,7 +249,13 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.inputModel.enterOrLeave(true);
+    // See [onWindowBlur].
+    if (!Platform.isWindows) {
+      if (!_rawKeyFocusNode.hasFocus) {
+        _rawKeyFocusNode.requestFocus();
+      }
+      bind.sessionEnterOrLeave(id: widget.id, enter: true);
+    }
   }
 
   void leaveView(PointerExitEvent evt) {
@@ -208,7 +268,10 @@ class _RemotePageState extends State<RemotePage>
         //
       }
     }
-    _ffi.inputModel.enterOrLeave(false);
+    // See [onWindowBlur].
+    if (!Platform.isWindows) {
+      bind.sessionEnterOrLeave(id: widget.id, enter: false);
+    }
   }
 
   Widget getBodyForDesktop(BuildContext context) {
@@ -230,6 +293,21 @@ class _RemotePageState extends State<RemotePage>
           listenerBuilder: (child) => RawPointerMouseRegion(
             onEnter: enterView,
             onExit: leaveView,
+            onPointerDown: (event) {
+              // A double check for blur status.
+              // Note: If there's an `onPointerDown` event is triggered, `_isWindowBlur` is expected being false.
+              // Sometimes the system does not send the necessary focus event to flutter. We should manually
+              // handle this inconsistent status by setting `_isWindowBlur` to false. So we can
+              // ensure the grab-key thread is running when our users are clicking the remote canvas.
+              if (_isWindowBlur) {
+                debugPrint(
+                    "Unexpected status: onPointerDown is triggered while the remote window is in blur status");
+                _isWindowBlur = false;
+              }
+              if (!_rawKeyFocusNode.hasFocus) {
+                _rawKeyFocusNode.requestFocus();
+              }
+            },
             inputModel: _ffi.inputModel,
             child: child,
           ),
@@ -237,9 +315,9 @@ class _RemotePageState extends State<RemotePage>
       }))
     ];
 
-    if (!_ffi.canvasModel.cursorEmbeded) {
-      paints.add(Obx(() => Visibility(
-          visible: _showRemoteCursor.isTrue && _remoteCursorMoved.isTrue,
+    if (!_ffi.canvasModel.cursorEmbedded) {
+      paints.add(Obx(() => Offstage(
+          offstage: _showRemoteCursor.isFalse || _remoteCursorMoved.isFalse,
           child: CursorPaint(
             id: widget.id,
             zoomCursor: _zoomCursor,
@@ -304,7 +382,7 @@ class _ImagePaintState extends State<ImagePaint> {
 
     mouseRegion({child}) => Obx(() => MouseRegion(
         cursor: cursorOverImage.isTrue
-            ? c.cursorEmbeded
+            ? c.cursorEmbedded
                 ? SystemMouseCursors.none
                 : keyboardEnabled.isTrue
                     ? (() {
@@ -539,7 +617,8 @@ class CursorPaint extends StatelessWidget {
 
     double cx = c.x;
     double cy = c.y;
-    if (c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.viewStyle.style == kRemoteViewStyleOriginal &&
+        c.scrollStyle == ScrollStyle.scrollbar) {
       final d = c.parent.target!.ffiModel.display;
       final imageWidth = d.width * c.scale;
       final imageHeight = d.height * c.scale;
@@ -548,7 +627,7 @@ class CursorPaint extends StatelessWidget {
     }
 
     double x = (m.x - hotx) * c.scale + cx;
-    double y = (m.y - hoty) * c.scale + cx;
+    double y = (m.y - hoty) * c.scale + cy;
     double scale = 1.0;
     if (zoomCursor.isTrue) {
       x = m.x - hotx + cx / c.scale;

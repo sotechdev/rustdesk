@@ -39,6 +39,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "改变ID"),
         ("Website", "网站"),
         ("About", "关于"),
+        ("Slogan_tip", ""),
+        ("Privacy Statement", ""),
         ("Mute", "静音"),
         ("Audio Input", "音频输入"),
         ("Enhancements", "增强功能"),
@@ -403,5 +405,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Address Book", "添加到地址簿"),
         ("Group", "小组"),
         ("Search", "搜索"),
+        ("Closed manually by the web console", "被web控制台手动关闭"),
+        ("Local keyboard type", "本地键盘类型"),
+        ("Select local keyboard type", "请选择本地键盘类型"),
     ].iter().cloned().collect();
 }

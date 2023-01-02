@@ -19,7 +19,8 @@ use crate::flutter::{self, SESSIONS};
 use crate::ui_interface::{self, *};
 use crate::{
     client::file_trait::FileManager,
-    flutter::{make_fd_to_json, session_add, session_start_},
+    common::make_fd_to_json,
+    flutter::{session_add, session_start_},
 };
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -179,6 +180,14 @@ pub fn get_local_flutter_config(k: String) -> SyncReturn<String> {
 
 pub fn set_local_flutter_config(k: String, v: String) {
     ui_interface::set_local_flutter_config(k, v);
+}
+
+pub fn get_local_kb_layout_type() -> SyncReturn<String> {
+    SyncReturn(ui_interface::get_kb_layout_type())
+}
+
+pub fn set_local_kb_layout_type(kb_layout_type: String) {
+    ui_interface::set_kb_layout_type(kb_layout_type)
 }
 
 pub fn session_get_view_style(id: String) -> Option<String> {
@@ -894,9 +903,9 @@ pub fn session_restart_remote_device(id: String) {
     }
 }
 
-pub fn session_get_audit_server_sync(id: String) -> SyncReturn<String> {
+pub fn session_get_audit_server_sync(id: String, typ: String) -> SyncReturn<String> {
     let res = if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.get_audit_server()
+        session.get_audit_server(typ)
     } else {
         "".to_owned()
     };

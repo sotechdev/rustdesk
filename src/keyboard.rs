@@ -3,23 +3,23 @@ use crate::client::get_key_state;
 use crate::common::GrabState;
 #[cfg(feature = "flutter")]
 use crate::flutter::FlutterHandler;
-#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
 use crate::ui::remote::SciterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{log, message_proto::*};
-#[cfg(target_os = "linux")]
-use rdev::GrabError;
 use rdev::{Event, EventType, Key};
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
     time::SystemTime,
 };
 
+#[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(feature = "flutter")]
@@ -27,7 +27,7 @@ lazy_static::lazy_static! {
     static ref CUR_SESSION: Arc<Mutex<Option<Session<FlutterHandler>>>> = Default::default();
 }
 
-#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
 lazy_static::lazy_static! {
     static ref CUR_SESSION: Arc<Mutex<Option<Session<SciterHandler>>>> = Default::default();
 }
@@ -53,7 +53,7 @@ pub fn set_cur_session(session: Session<FlutterHandler>) {
     *CUR_SESSION.lock().unwrap() = Some(session);
 }
 
-#[cfg(not(feature = "flutter"))]
+#[cfg(not(any(feature = "flutter", feature = "cli")))]
 pub fn set_cur_session(session: Session<SciterHandler>) {
     *CUR_SESSION.lock().unwrap() = Some(session);
 }
@@ -62,11 +62,11 @@ pub mod client {
     use super::*;
 
     pub fn get_keyboard_mode() -> String {
+        #[cfg(not(feature = "cli"))]
         if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-            handler.get_keyboard_mode()
-        } else {
-            "legacy".to_string()
-        }
+            return handler.get_keyboard_mode();
+        } 
+        "legacy".to_string()
     }
 
     pub fn start_grab_loop() {
@@ -103,8 +103,9 @@ pub mod client {
         if is_long_press(&event) {
             return;
         }
-        let key_event = event_to_key_event(&event);
-        send_key_event(&key_event);
+        if let Some(key_event) = event_to_key_event(&event) {
+            send_key_event(&key_event);
+        }
     }
 
     pub fn get_modifiers_state(
@@ -266,7 +267,7 @@ pub fn get_keyboard_mode_enum() -> KeyboardMode {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn add_numlock_capslock_state(key_event: &mut KeyEvent) {
+pub fn add_numlock_capslock_status(key_event: &mut KeyEvent) {
     if get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
     }
@@ -314,7 +315,7 @@ fn update_modifiers_state(event: &Event) {
     };
 }
 
-pub fn event_to_key_event(event: &Event) -> KeyEvent {
+pub fn event_to_key_event(event: &Event) -> Option<KeyEvent> {
     let mut key_event = KeyEvent::new();
     update_modifiers_state(event);
 
@@ -330,22 +331,24 @@ pub fn event_to_key_event(event: &Event) -> KeyEvent {
 
     let keyboard_mode = get_keyboard_mode_enum();
     key_event.mode = keyboard_mode.into();
-    match keyboard_mode {
-        KeyboardMode::Map => {
-            map_keyboard_mode(event, &mut key_event);
-        }
-        KeyboardMode::Translate => {
-            translate_keyboard_mode(event, &mut key_event);
-        }
+    let mut key_event = match keyboard_mode {
+        KeyboardMode::Map => map_keyboard_mode(event, key_event)?,
+        KeyboardMode::Translate => translate_keyboard_mode(event, key_event)?,
         _ => {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            legacy_keyboard_mode(event, &mut key_event);
+            {
+                legacy_keyboard_mode(event, key_event)?
+            }
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            {
+                None?
+            }
         }
     };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    add_numlock_capslock_state(&mut key_event);
+    add_numlock_capslock_status(&mut key_event);
 
-    return key_event;
+    return Some(key_event);
 }
 
 pub fn event_type_to_event(event_type: EventType) -> Event {
@@ -359,28 +362,28 @@ pub fn event_type_to_event(event_type: EventType) -> Event {
 }
 
 pub fn send_key_event(key_event: &KeyEvent) {
+    #[cfg(not(feature = "cli"))]
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
         handler.send_key_event(key_event);
     }
 }
 
 pub fn get_peer_platform() -> String {
+    #[cfg(not(feature = "cli"))]
     if let Some(handler) = CUR_SESSION.lock().unwrap().as_ref() {
-        handler.peer_platform()
-    } else {
-        log::error!("get peer platform error");
-        "Windows".to_string()
-    }
+        return handler.peer_platform();
+    } 
+    "Windows".to_string()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
+pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
     // legacy mode(0): Generate characters locally, look for keycode on other side.
     let (mut key, down_or_up) = match event.event_type {
         EventType::KeyPress(key) => (key, true),
         EventType::KeyRelease(key) => (key, false),
         _ => {
-            return;
+            return None;
         }
     };
 
@@ -422,11 +425,11 @@ pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
             // when pressing AltGr, an extra VK_LCONTROL with a special
             // scancode with bit 9 set is sent, let's ignore this.
             #[cfg(windows)]
-            if event.scan_code & 0x200 != 0 {
+            if (event.scan_code >> 8) == 0xE0 {
                 unsafe {
                     IS_ALT_GR = true;
                 }
-                return;
+                return None;
             }
             Some(ControlKey::Control)
         }
@@ -458,7 +461,7 @@ pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
         Key::Delete => {
             if is_win && ctrl && alt {
                 client::ctrl_alt_del();
-                return;
+                return None;
             }
             Some(ControlKey::Delete)
         }
@@ -496,7 +499,7 @@ pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
         Key::KpMinus => Some(ControlKey::Subtract),
         Key::KpPlus => Some(ControlKey::Add),
         Key::CapsLock | Key::NumLock | Key::ScrollLock => {
-            return;
+            return None;
         }
         Key::Home => Some(ControlKey::Home),
         Key::End => Some(ControlKey::End),
@@ -579,43 +582,74 @@ pub fn legacy_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
         if chr != '\0' {
             if chr == 'l' && is_win && command {
                 client::lock_screen();
-                return;
+                return None;
             }
             key_event.set_chr(chr as _);
         } else {
             log::error!("Unknown key {:?}", &event);
-            return;
+            return None;
         }
     }
     let (alt, ctrl, shift, command) = client::get_modifiers_state(alt, ctrl, shift, command);
-    client::legacy_modifiers(key_event, alt, ctrl, shift, command);
+    client::legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
 
     if down_or_up == true {
         key_event.down = true;
     }
+    Some(key_event)
 }
 
-pub fn map_keyboard_mode(event: &Event, key_event: &mut KeyEvent) {
+pub fn map_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
+    match event.event_type {
+        EventType::KeyPress(..) => {
+            key_event.down = true;
+        }
+        EventType::KeyRelease(..) => {
+            key_event.down = false;
+        }
+        _ => return None,
+    };
+
     let mut peer = get_peer_platform().to_lowercase();
     peer.retain(|c| !c.is_whitespace());
 
-    let key = match event.event_type {
-        EventType::KeyPress(key) => {
-            key_event.down = true;
-            key
+    #[cfg(target_os = "windows")]
+    let keycode = match peer.as_str() {
+        "windows" => event.scan_code,
+        "macos" => {
+            if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
+                rdev::win_scancode_to_macos_iso_code(event.scan_code)?
+            } else {
+                rdev::win_scancode_to_macos_code(event.scan_code)?
+            }
         }
-        EventType::KeyRelease(key) => {
-            key_event.down = false;
-            key
+        _ => rdev::win_scancode_to_linux_code(event.scan_code)?,
+    };
+    #[cfg(target_os = "macos")]
+    let keycode = match peer.as_str() {
+        "windows" => rdev::macos_code_to_win_scancode(event.code as _)?,
+        "macos" => event.code as _,
+        _ => rdev::macos_code_to_linux_code(event.code as _)?,
+    };
+    #[cfg(target_os = "linux")]
+    let keycode = match peer.as_str() {
+        "windows" => rdev::linux_code_to_win_scancode(event.code as _)?,
+        "macos" => {
+            if hbb_common::config::LocalConfig::get_kb_layout_type() == "ISO" {
+                rdev::linux_code_to_macos_iso_code(event.scan_code)?
+            } else {
+                rdev::linux_code_to_macos_code(event.code as _)?
+            }
         }
-        _ => return,
+        _ => event.code as _,
     };
-    let keycode: u32 = match peer.as_str() {
-        "windows" => rdev::win_keycode_from_key(key).unwrap_or_default().into(),
-        "macos" => rdev::macos_keycode_from_key(key).unwrap_or_default().into(),
-        _ => rdev::linux_keycode_from_key(key).unwrap_or_default().into(),
-    };
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let keycode = 0;
+
     key_event.set_chr(keycode);
+    Some(key_event)
 }
 
-pub fn translate_keyboard_mode(_event: &Event, _key_event: &mut KeyEvent) {}
+pub fn translate_keyboard_mode(_event: &Event, mut _key_event: KeyEvent) -> Option<KeyEvent> {
+    None
+}
